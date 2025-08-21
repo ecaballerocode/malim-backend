@@ -12,8 +12,8 @@ const PORT = process.env.PORT || 4000;
 // ✅ CONFIGURACIÓN CORS PARA PRODUCCIÓN
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ["https://ecaballerocode.github.io/malim-app/", "https://ecaballerocode.github.io/malim-app/"] // Reemplaza con tu dominio real
-    : "*", // En desarrollo permite todo
+    ? ["https://ecaballerocode.github.io", "https://ecaballerocode.github.io/malim-app/"] 
+    : "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
   credentials: true
@@ -38,20 +38,14 @@ app.use(express.urlencoded({ extended: true }));
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
-    files: 10 // Máximo 10 archivos
+    fileSize: 10 * 1024 * 1024,
+    files: 10
   },
   fileFilter: (req, file, cb) => {
-    // Validar tipos de archivo
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(file.originalname.toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Solo se permiten imágenes (JPEG, PNG, GIF, WebP)'));
-    }
+    mimetype && extname ? cb(null, true) : cb(new Error('Solo se permiten imágenes'));
   }
 });
 
@@ -65,13 +59,12 @@ const s3 = new S3Client({
   },
 });
 
-// ✅ MIDDLEWARE DE VALIDACIÓN PARA RUTAS CRÍTICAS
+// ✅ MIDDLEWARE DE VALIDACIÓN
 const validateEnvVars = (req, res, next) => {
   const requiredVars = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY', 'R2_SECRET_KEY', 'R2_BUCKET', 'R2_DEV_URL'];
   const missingVars = requiredVars.filter(varName => !process.env[varName]);
   
   if (missingVars.length > 0) {
-    console.error("❌ Variables de entorno faltantes:", missingVars);
     return res.status(500).json({
       error: "Configuración incompleta del servidor",
       missing: missingVars
@@ -80,9 +73,10 @@ const validateEnvVars = (req, res, next) => {
   next();
 };
 
-// ✅ RUTA PRINCIPAL DE UPLOAD (OPTIMIZADA)
+// ✅ RUTA PRINCIPAL DE UPLOAD (ÚNICA - SIN DUPLICADOS)
 app.post("/upload", validateEnvVars, upload.array("files", 10), async (req, res) => {
   try {
+    console.log("📨 Upload endpoint called");
     const files = req.files;
     
     if (!files || files.length === 0) {
@@ -92,12 +86,11 @@ app.post("/upload", validateEnvVars, upload.array("files", 10), async (req, res)
       });
     }
 
-    console.log(`📤 Intentando subir ${files.length} archivo(s) a Cloudflare R2`);
-
+    console.log(`📤 Subiendo ${files.length} archivo(s) a Cloudflare R2`);
     const uploadedUrls = [];
     const errors = [];
 
-    // Subir archivos en paralelo para mejor performance
+    // Subir archivos en paralelo
     await Promise.all(files.map(async (file) => {
       try {
         const fileName = `malim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
@@ -110,7 +103,6 @@ app.post("/upload", validateEnvVars, upload.array("files", 10), async (req, res)
         };
 
         await s3.send(new PutObjectCommand(params));
-        
         const publicUrl = `${process.env.R2_DEV_URL}/${fileName}`;
         uploadedUrls.push(publicUrl);
         
@@ -125,17 +117,10 @@ app.post("/upload", validateEnvVars, upload.array("files", 10), async (req, res)
       }
     }));
 
-    if (uploadedUrls.length === 0 && errors.length > 0) {
-      return res.status(500).json({
-        success: false,
-        error: "Error subiendo todos los archivos",
-        details: errors
-      });
-    }
-
+    // ✅ ENVIAR RESPUESTA AL FRONTEND CON LAS URLs
     res.json({
       success: true,
-      urls: uploadedUrls,
+      urls: uploadedUrls, // ← ESTO ES LO QUE EL FRONTEND NECESITA
       message: `Subidos ${uploadedUrls.length} de ${files.length} archivos`,
       ...(errors.length > 0 && { warnings: errors })
     });
@@ -144,16 +129,14 @@ app.post("/upload", validateEnvVars, upload.array("files", 10), async (req, res)
     console.error("💥 Error en upload:", err.message);
     res.status(500).json({
       success: false,
-      error: "Error interno del servidor",
-      ...(process.env.NODE_ENV !== 'production' && { details: err.message })
+      error: "Error interno del servidor"
     });
   }
 });
 
-// ✅ RUTAS DE HEALTH CHECK (ESENCIALES PARA PRODUCCIÓN)
+// ✅ RUTAS DE HEALTH CHECK
 app.get("/health", async (req, res) => {
   try {
-    // Verificar conexión a R2
     const command = new ListObjectsCommand({ Bucket: process.env.R2_BUCKET });
     const data = await s3.send(command);
     
@@ -180,8 +163,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     endpoints: {
       upload: "POST /upload",
-      health: "GET /health",
-      docs: "GET /api-docs (pendiente)"
+      health: "GET /health"
     },
     environment: process.env.NODE_ENV || 'development'
   });
@@ -211,37 +193,29 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// ✅ MANEJO DE ERRORES CENTRALIZADO
+// ✅ MANEJO DE ERRORES
 app.use((err, req, res, next) => {
   console.error("❌ Error no manejado:", err.message);
   
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({
-        success: false,
-        error: "Archivo demasiado grande (máximo 10MB)"
-      });
+      return res.status(400).json({ error: "Archivo demasiado grande (máximo 10MB)" });
     }
     if (err.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({
-        success: false,
-        error: "Demasiados archivos (máximo 10)"
-      });
+      return res.status(400).json({ error: "Demasiados archivos (máximo 10)" });
     }
   }
   
-  res.status(500).json({
-    success: false,
+  res.status(500).json({ 
     error: process.env.NODE_ENV === 'production' 
       ? "Error interno del servidor" 
-      : err.message
+      : err.message 
   });
 });
 
 // ✅ RUTA 404
 app.use("*", (req, res) => {
   res.status(404).json({
-    success: false,
     error: "Endpoint no encontrado",
     path: req.originalUrl
   });
@@ -249,10 +223,8 @@ app.use("*", (req, res) => {
 
 // ✅ INICIAR SERVIDOR
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor Malim Backend ejecutándose en puerto ${PORT}`);
-  console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
   console.log(`📦 Bucket R2: ${process.env.R2_BUCKET}`);
-  console.log(`🔧 Health check disponible en: http://localhost:${PORT}/health`);
 });
 
 export default app;
