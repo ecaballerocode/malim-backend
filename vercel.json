@@ -1,16 +1,6 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "index.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/index.js",
-      "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    }
-  ]
+  "functions": {
+    "api/upload.js": { "maxDuration": 20, "memory": 1024 },
+    "api/health.js": { "maxDuration": 10, "memory": 512 }
+  }
 }
