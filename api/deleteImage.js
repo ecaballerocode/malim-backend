@@ -3,7 +3,7 @@ import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "./_lib/s3.js";
 import { setCORS, handlePreflight } from "./_lib/cors.js";
 
-// Función para extraer la key correctamente de diferentes formatos de URL de R2
+// Función mejorada para extraer la key de diferentes formatos de URL de R2
 function extractR2Key(url) {
   try {
     const urlObj = new URL(url);
@@ -16,25 +16,26 @@ function extractR2Key(url) {
       if (key.startsWith('/')) {
         key = key.substring(1);
       }
-      return key;
+      return decodeURIComponent(key); // Importante: decodificar caracteres especiales
     }
     
-    // Para URLs de R2 con custom domain o otros formatos
-    // Si la URL contiene el bucket name en el path
-    if (urlObj.pathname.includes('/')) {
-      // Asumimos que la key es todo después del primer slash
-      const parts = urlObj.pathname.split('/');
-      if (parts.length > 1) {
-        return parts.slice(1).join('/');
+    // Para URLs de R2 con custom domain
+    // Asumimos que la URL contiene el bucket name como subdominio o en el path
+    if (url.includes('pub-') || url.includes('r2')) {
+      // Extraer la key del pathname
+      let key = urlObj.pathname;
+      if (key.startsWith('/')) {
+        key = key.substring(1);
       }
+      return decodeURIComponent(key);
     }
     
-    // Si no podemos determinar, devolvemos el pathname completo sin el slash inicial
-    return urlObj.pathname.replace(/^\//, '');
+    // Si no podemos determinar, devolvemos el pathname completo
+    return decodeURIComponent(urlObj.pathname.replace(/^\//, ''));
     
   } catch (error) {
     console.error("Error parsing URL:", url, error);
-    throw new Error("URL inválida");
+    throw new Error("URL inválida: " + url);
   }
 }
 
@@ -57,28 +58,30 @@ export default async function handler(req, res) {
 
   try {
     console.log("URL recibida para eliminar:", url);
+    const decodedUrl = decodeURIComponent(url);
 
     // Verificamos si es de Cloudflare R2
-    if (url.includes("r2.dev") || url.includes("pub-")) {
-      const key = extractR2Key(url);
+    if (decodedUrl.includes("r2.dev") || decodedUrl.includes("pub-")) {
+      const key = extractR2Key(decodedUrl);
       console.log("Key extraída:", key);
       console.log("Bucket:", process.env.R2_BUCKET);
 
-      if (!key) {
+      if (!key || key.trim() === '') {
         return res.status(400).json({ 
           success: false, 
-          error: "No se pudo extraer la key de la URL" 
+          error: "No se pudo extraer una key válida de la URL" 
         });
       }
 
-      // Verificar que la key no esté vacía
-      if (key.trim() === '') {
-        return res.status(400).json({ 
+      // Verificar que el bucket esté configurado
+      if (!process.env.R2_BUCKET) {
+        return res.status(500).json({ 
           success: false, 
-          error: "Key vacía" 
+          error: "Configuración del bucket R2 no encontrada" 
         });
       }
 
+      // Eliminar objeto de R2
       await s3.send(new DeleteObjectCommand({
         Bucket: process.env.R2_BUCKET,
         Key: key,
@@ -106,6 +109,13 @@ export default async function handler(req, res) {
       return res.status(404).json({ 
         success: false, 
         error: "La imagen no fue encontrada en R2" 
+      });
+    }
+    
+    if (error.name === 'AccessDenied') {
+      return res.status(403).json({ 
+        success: false, 
+        error: "Acceso denegado al bucket R2" 
       });
     }
     
