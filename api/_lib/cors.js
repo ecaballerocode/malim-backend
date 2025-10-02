@@ -4,6 +4,8 @@ export function setCORS(req, res) {
     "https://ecaballerocode.github.io",
     "https://ecaballerocode.github.io/malim-app",
     "http://localhost:3000",
+    "https://malim-app.vercel.app",
+    "https://ecaballerocode.github.io/borrar-productos",
     process.env.CODESPACES_ORIGIN, // opcional: tu URL de Codespaces
   ].filter(Boolean);
 
