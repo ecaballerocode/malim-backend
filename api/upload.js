@@ -1,4 +1,4 @@
-// api/upload.js
+// runtime: nodejs18.x
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "./_lib/s3.js";
 import { setCORS, handlePreflight } from "./_lib/cors.js";
