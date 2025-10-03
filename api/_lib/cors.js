@@ -1,13 +1,13 @@
 // api/_lib/cors.js
 export function setCORS(req, res) {
   const allowed = [
-    "https://ecaballerocode.github.io",
-    "https://ecaballerocode.github.io/malim-app",
-    "http://localhost:3000",
-    "https://malim-app.vercel.app",
-    "https://ecaballerocode.github.io/borrar-productos",
-    process.env.CODESPACES_ORIGIN, // opcional: tu URL de Codespaces
-  ].filter(Boolean);
+  "https://ecaballerocode.github.io",
+  "https://ecaballerocode.github.io/malim-app",
+  "http://localhost:3000",
+  "https://malim-app.vercel.app",
+  "https://ecaballerocode.github.io/borrar-productos",
+  process.env.CODESPACES_ORIGIN,
+].filter(Boolean);
 
   const origin = req.headers.origin || "";
   const isAllowed = allowed.some(a => origin.startsWith(a));

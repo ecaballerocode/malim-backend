@@ -1,6 +1,14 @@
 {
   "functions": {
-    "api/upload.js": { "maxDuration": 20, "memory": 1024 },
-    "api/health.js": { "maxDuration": 10, "memory": 512 }
+    "api/upload.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 20,
+      "memory": 1024
+    },
+    "api/deleteImage.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 10,
+      "memory": 512
+    }
   }
 }

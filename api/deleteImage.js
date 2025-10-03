@@ -3,36 +3,12 @@ import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "./_lib/s3.js";
 import { setCORS, handlePreflight } from "./_lib/cors.js";
 
-// Función mejorada para extraer la key de diferentes formatos de URL de R2
+// Función para extraer la key desde una URL de R2
 function extractR2Key(url) {
   try {
     const urlObj = new URL(url);
-    
-    // Para URLs de R2 públicas (r2.dev)
-    if (url.includes('.r2.dev')) {
-      // Formato: https://bucket-name.r2.dev/folder/image.jpg
-      // La key es todo después del hostname
-      let key = urlObj.pathname;
-      if (key.startsWith('/')) {
-        key = key.substring(1);
-      }
-      return decodeURIComponent(key); // Importante: decodificar caracteres especiales
-    }
-    
-    // Para URLs de R2 con custom domain
-    // Asumimos que la URL contiene el bucket name como subdominio o en el path
-    if (url.includes('pub-') || url.includes('r2')) {
-      // Extraer la key del pathname
-      let key = urlObj.pathname;
-      if (key.startsWith('/')) {
-        key = key.substring(1);
-      }
-      return decodeURIComponent(key);
-    }
-    
-    // Si no podemos determinar, devolvemos el pathname completo
-    return decodeURIComponent(urlObj.pathname.replace(/^\//, ''));
-    
+    let key = urlObj.pathname.startsWith("/") ? urlObj.pathname.slice(1) : urlObj.pathname;
+    return decodeURIComponent(key);
   } catch (error) {
     console.error("Error parsing URL:", url, error);
     throw new Error("URL inválida: " + url);
@@ -58,7 +34,7 @@ export default async function handler(req, res) {
 
   try {
     console.log("URL recibida para eliminar:", url);
-    const decodedUrl = decodeURIComponent(url);
+    const decodedUrl = decodeURIComponent(url.trim());
 
     // Verificamos si es de Cloudflare R2
     if (decodedUrl.includes("r2.dev") || decodedUrl.includes("pub-")) {
