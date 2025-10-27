@@ -1,8 +1,10 @@
 // /api/product-preview.js  (ES Module)
 export default async (req, res) => {
-  const { name, desc, image, spa_url } = req.query;
+  // 1. ACEPTAMOS EL NUEVO PARÁMETRO: self_url (la URL completa de este backend)
+  const { name, desc, image, spa_url, self_url } = req.query;
 
   const FALLBACK_DOMAIN = 'https://malim-shop.vercel.app/';
+  // Incluimos self_url en la validación por si acaso, aunque generalmente no será null
   const isInvalid = !name || !image || !spa_url || name.trim() === "" || image.trim() === "" || spa_url.trim() === "";
 
   if (isInvalid) {
@@ -16,8 +18,12 @@ export default async (req, res) => {
   const description = String(desc || 'Consulta los detalles de este increíble artículo de nuestra tienda.');
   const imageUrl = String(image);
   const spaUrl = String(spa_url);
+  
+  // CLAVE: Usamos la URL del backend (self_url) para la etiqueta og:url.
+  // Si self_url no existe (por si el frontend no ha actualizado), usamos spaUrl como fallback.
+  const ogUrl = String(self_url || spaUrl);
 
-  // Lista simple de user-agents de crawlers (puedes ampliarla)
+  // Lista simple de user-agents de crawlers (se mantiene igual)
   const crawlerUserAgents = [
     'facebookexternalhit', 'Facebot', 'Twitterbot', 'Slackbot', 'WhatsApp', 'LinkedInBot', 'telegrambot'
   ];
@@ -41,10 +47,11 @@ export default async (req, res) => {
   <meta property="og:title" content="${escapeHtml(title)}" />
   <meta property="og:description" content="${escapeHtml(description)}" />
   <meta property="og:image" content="${escapeHtml(imageUrl)}" />
-  <meta property="og:url" content="${escapeHtml(spaUrl)}" />
+  
+  <meta property="og:url" content="${escapeHtml(ogUrl)}" />
+  
   <link rel="canonical" href="${escapeHtml(spaUrl)}" />
 
-  <!-- opcionales, ayudan al crawler a elegir la imagen correcta -->
   <meta property="og:image:alt" content="${escapeHtml(title)}" />
   <meta name="twitter:card" content="summary_large_image" />
 </head>
@@ -55,23 +62,21 @@ export default async (req, res) => {
     <p><a href="${escapeHtml(spaUrl)}">${escapeHtml(spaUrl)}</a></p>
   </main>
   <script>
-    // Si es un navegador humano, redirigimos pasados 400ms para que el humano no note parpadeo;
-    // los crawlers no ejecutan JS y ya habrán recibido las OG tags.
+    // Si es un navegador humano, redirigimos pasados 400ms 
     setTimeout(()=>{ window.location.replace("${escapeForJs(spaUrl)}"); }, 400);
   </script>
 </body>
 </html>`;
 
   if (isCrawler) {
-  // DEVOLVEMOS 200 con OG tags para crawlers (sin redirect)
-  // Forzamos cabecera canonical para que WhatsApp muestre la URL real (no la del backend)
-  res.setHeader('Content-Location', spaUrl);
-  res.setHeader('Link', `<${spaUrl}>; rel="canonical"`);
-  res.status(200).send(htmlWithOG);
-} else {
-
-    // Para navegadores normales: redirección 302 al SPA (esto evita "ver la página un instante" si quieres redirigir rápido)
-    // Si prefieres que el navegador muestre el HTML antes de redirigir, cambia a res.status(200).send(htmlWithOG);
+    // DEVOLVEMOS 200 con OG tags para crawlers (sin redirect)
+    // CLAVE WHATSAPP: Forzamos la cabecera canonical (Content-Location/Link)
+    // para que WhatsApp muestre la URL limpia de la PWA.
+    res.setHeader('Content-Location', spaUrl);
+    res.setHeader('Link', `<${spaUrl}>; rel="canonical"`);
+    res.status(200).send(htmlWithOG);
+  } else {
+    // Para navegadores normales: redirección 302 al SPA
     res.setHeader('Location', spaUrl);
     res.status(302).end();
   }
