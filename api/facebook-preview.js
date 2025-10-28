@@ -1,6 +1,6 @@
-// /api/facebook-preview.js (Optimizado para FB y Collage)
+// /api/facebook-preview.js (Optimizado para FB: Collage, Cliclable, Tallas/Detalles)
 export default async (req, res) => {
-  // 1. ACEPTAMOS Y USAMOS self_url, ya que el frontend de FB lo enviará.
+  // Aceptamos self_url para mantener la compatibilidad con el frontend, pero lo ignoramos para og:url
   const { name, desc, image, spa_url, self_url } = req.query;
 
   const FALLBACK_DOMAIN = 'https://malim-shop.vercel.app/';
@@ -12,14 +12,15 @@ export default async (req, res) => {
     return;
   }
 
-  // Normalize values
+  // Normalize values (evitar inyección de HTML)
   const title = String(name);
-  const description = String(desc || 'Consulta los detalles de este increíble artículo de nuestra tienda.');
+  const description = String(desc || 'Consulta los detalles de este increíble artículo de nuestra tienda.'); 
   const imageUrl = String(image);
   const spaUrl = String(spa_url);
   
-  // ✅ CLAVE FB: Usamos la URL del backend (self_url) para og:url.
-  const ogUrl = String(self_url || spaUrl); 
+  // ✅ CORRECCIÓN CLAVE: Hacemos que og:url apunte a la URL de la tienda (spaUrl).
+  // Esto resuelve el problema de la no-clickabilidad en el feed de Facebook.
+  const ogUrl = spaUrl; 
 
   // Lista de user-agents de crawlers
   const crawlerUserAgents = [
@@ -68,7 +69,6 @@ export default async (req, res) => {
 
   if (isCrawler) {
     // DEVOLVEMOS 200 con OG tags para crawlers (sin redirect)
-    // Forzamos cabeceras canonicales
     res.setHeader('Content-Location', spaUrl);
     res.setHeader('Link', `<${spaUrl}>; rel="canonical"`);
     res.status(200).send(htmlWithOG);
@@ -85,7 +85,7 @@ function escapeHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '>gt;');
 }
 function escapeForJs(str) {
   return String(str).replace(/\\/g, '\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
