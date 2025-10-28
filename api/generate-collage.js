@@ -1,5 +1,5 @@
 // /api/generate-collage.js
-// Requiere: npm install canvas
+// Requiere: npm install canvas ins
 import { createCanvas, loadImage } from 'canvas';
 import { URLSearchParams } from 'url';
 
