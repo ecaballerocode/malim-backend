@@ -3,6 +3,7 @@ export function setCORS(req, res) {
     "https://ecaballerocode.github.io",
     "https://ecaballerocode.github.io/malim-app",
     "http://localhost:3000",
+    "http://localhost:5173",
     "https://malim-app.vercel.app",
     "https://ecaballerocode.github.io/borrar-productos",
     process.env.CODESPACES_ORIGIN,
