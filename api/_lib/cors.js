@@ -6,6 +6,7 @@ export function setCORS(req, res) {
     "http://localhost:5173",
     "https://malim-app.vercel.app",
     "https://ecaballerocode.github.io/borrar-productos",
+    "https://intranet-malim.vercel.app",
     process.env.CODESPACES_ORIGIN,
   ].filter(Boolean);
 
