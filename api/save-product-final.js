@@ -1,41 +1,40 @@
 // api/save-product-final.js
 
 import admin from "firebase-admin";
-// Asegúrate de que este archivo existe y es necesario, o coméntalo/elimínalo si da problemas.
+// Asegúrate de que este archivo cors.js exista y contenga las funciones setCORS y handlePreflight
 import { setCORS, handlePreflight } from "./_lib/cors.js"; 
 
-// --- CONFIGURACIÓN DE FIREBASE ADMIN (Versión MÁS robusta para escapes) ---
+// --- CONFIGURACIÓN ROBUSTA DE FIREBASE ADMIN (Usando variables separadas) ---
 if (!admin.apps.length) {
     try {
-        // 1. Obtener el string de la variable de entorno
-        let serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT;
-        
-        if (!serviceAccountString) {
-            throw new Error("La variable de entorno FIREBASE_SERVICE_ACCOUNT no está definida.");
+        // Obtener las variables de entorno separadas
+        const privateKeyString = process.env.FIREBASE_PRIVATE_KEY;
+        const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+        const projectId = process.env.FIREBASE_PROJECT_ID;
+
+        if (!privateKeyString || !clientEmail || !projectId) {
+             throw new Error("Faltan variables de entorno de Firebase esenciales (PRIVATE_KEY, CLIENT_EMAIL, PROJECT_ID).");
         }
-
-        // 2. CORRECCIÓN CLAVE: Asegurar que los saltos de línea (\n) son correctos.
-        // A. Corrección para el doble escape (\\n en lugar de \n) que a menudo añade Vercel.
-        serviceAccountString = serviceAccountString.replace(/\\\\n/g, '\\n');
         
-        // B. Corrección adicional para cualquier '\n' que aún pueda ser interpretado
-        // como un escape literal por JSON.parse (si el JSON es de una sola línea)
-        // Convertimos el string 'literal' \n en el carácter de nueva línea real.
-        serviceAccountString = serviceAccountString.replace(/\\n/g, '\n'); 
-        
-        // 3. Parsea el JSON ya corregido
-        const serviceAccount = JSON.parse(serviceAccountString);
+        // CORRECCIÓN CLAVE: Limpiar la llave privada de los escapes introducidos por Vercel.
+        // Esto asegura que la llave sea multilínea, lo cual es necesario para la autenticación.
+        const cleanedPrivateKey = privateKeyString
+            .replace(/\\n/g, '\n') 
+            .replace(/\\\\n/g, '\n'); 
 
-        // 4. Inicializa Firebase Admin
         admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
+            credential: admin.credential.cert({
+                projectId: projectId,
+                clientEmail: clientEmail,
+                privateKey: cleanedPrivateKey,
+            })
         });
         
+        console.log("✅ Firebase Admin inicializado correctamente con variables separadas.");
+
     } catch (e) {
-        console.error("🚨 Error crítico al inicializar Firebase Admin:", e);
-        // Lanzamos un error claro para el log
-        // Si este error ocurre, significa que la variable de entorno está mal formada.
-        throw new Error("Fallo al inicializar Firebase Admin. Revisar logs detalladamente y la variable FIREBASE_SERVICE_ACCOUNT.");
+        console.error("🚨 Error crítico al inicializar Firebase. Revise el formato de FIREBASE_PRIVATE_KEY:", e.message);
+        throw e;
     }
 }
 
@@ -43,26 +42,29 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // --------------------------------------------------------------------------
-// --- HANDLER PRINCIPAL (El resto permanece igual, ya era correcto) ---
+// --- HANDLER PRINCIPAL (Con corrección de CORS) ---
 // --------------------------------------------------------------------------
 export default async function handler(req, res) {
-    // Manejo de CORS si es necesario (asumiendo que setCORS y handlePreflight funcionan)
+    
+    // Manejo de CORS (Preflight)
     if (req.method === 'OPTIONS') {
-        handlePreflight(res);
+        // Asegúrate de que handlePreflight acepte (req, res)
+        handlePreflight(req, res); 
         return;
     }
-    setCORS(res);
     
-    // El resto del código de tu handler
+    // CORS para la petición principal (GET/POST/etc.)
+    // CORRECCIÓN: Asegúrate de pasar 'req' a setCORS para que pueda leer la cabecera 'Origin'
+    setCORS(req, res); 
+
     try {
         const productData = req.body;
         
         if (!productData || !productData.productSku) {
-            return res.status(400).json({ success: false, error: "Invalid product data or missing productSku." });
+            return res.status(400).json({ success: false, error: "Datos de producto inválidos o falta productSku." });
         }
         
         // Guardar/Actualizar el documento en Firestore
-        // Si el problema de autenticación se resuelve, esta línea funcionará.
         await db.collection("productos").doc(productData.productSku).set(productData, { merge: true });
 
         res.status(200).json({ 
@@ -71,8 +73,8 @@ export default async function handler(req, res) {
         });
 
     } catch (err) {
+        // Si ves un error aquí, ya no será de UNAUTHENTICATED, sino de la DB o código.
         console.error("🔴 Error guardando producto en Firestore:", err);
-        // Devolvemos 500 para errores internos (como el de autenticación/base de datos)
         res.status(500).json({ success: false, error: "Error interno al guardar en la base de datos." });
     }
 }
